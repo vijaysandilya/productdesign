@@ -23,30 +23,8 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// Helper to save message
-const saveMessage = (messageData) => {
-    const filePath = path.join(__dirname, '../messages.json');
-    let messages = [];
-
-    try {
-        if (fs.existsSync(filePath)) {
-            const fileData = fs.readFileSync(filePath, 'utf8');
-            messages = JSON.parse(fileData);
-        }
-    } catch (err) {
-        console.error('Error reading messages file:', err);
-    }
-
-    messages.push(messageData);
-
-    try {
-        fs.writeFileSync(filePath, JSON.stringify(messages, null, 2));
-        return true;
-    } catch (err) {
-        console.error('Error writing messages file:', err);
-        return false;
-    }
-};
+// Helper to save message (Removed for Serverless Persistence issues)
+// const saveMessage = (messageData) => { ... }
 
 // API Endpoint
 app.post('/api/contact', async (req, res) => {
@@ -56,25 +34,11 @@ app.post('/api/contact', async (req, res) => {
         return res.status(400).json({ success: false, message: 'All fields are required.' });
     }
 
-    const newMessage = {
-        id: Date.now(),
-        name,
-        email,
-        message,
-        timestamp: new Date().toISOString()
-    };
-
-    // 1. Save to JSON
-    const saved = saveMessage(newMessage);
-    if (!saved) {
-        return res.status(500).json({ success: false, message: 'Failed to save message.' });
-    }
-
-    // 2. Send Email
+    // 1. Send Email (Priority)
     const mailOptions = {
-        from: `"${name}" <${email}>`, // verified sender usually required, but this formats the "from" header
+        from: `"${name}" <${email}>`, // Note: Gmail often overrides this to the auth user, but it's good practice
         to: process.env.EMAIL_USER, // Send to yourself
-        replyTo: email, // Valid way to handle contact forms
+        replyTo: email,
         subject: `New Contact Form Message from ${name}`,
         text: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
         html: `<p><strong>Name:</strong> ${name}</p>
@@ -85,11 +49,12 @@ app.post('/api/contact', async (req, res) => {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log('Email sent successfully via Gmail');
+        console.log('Email sent successfully');
         res.json({ success: true, message: 'Message sent successfully!' });
     } catch (error) {
         console.error('Error sending email:', error);
-        res.status(500).json({ success: false, message: 'Failed to send email. Check server logs.' });
+        // Do not expose internal error details to client, but give a hint
+        res.status(500).json({ success: false, message: 'Failed to send email. Ensure server email configuration is correct.' });
     }
 });
 
